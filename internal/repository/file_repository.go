@@ -30,7 +30,11 @@ func NewFileRepository(db *pgxpool.Pool) *FileRepository {
 	}
 }
 
-func (r *FileRepository) Create(ctx context.Context, file File) error {
+func (r *FileRepository) Create(
+	ctx context.Context,
+	file File,
+) error {
+
 	query := `
 		INSERT INTO files (
 			id,
@@ -98,4 +102,70 @@ func (r *FileRepository) GetByID(
 	}
 
 	return file, nil
+}
+
+func (r *FileRepository) GetExpiredFiles(
+	ctx context.Context,
+) ([]File, error) {
+
+	query := `
+		SELECT
+			id,
+			original_name,
+			stored_name,
+			file_path,
+			file_size,
+			expires_at
+		FROM files
+		WHERE expires_at <= NOW()
+	`
+
+	rows, err := r.db.Query(ctx, query)
+	if err != nil {
+		return nil, err
+	}
+
+	defer rows.Close()
+
+	var files []File
+
+	for rows.Next() {
+		var file File
+
+		err := rows.Scan(
+			&file.ID,
+			&file.OriginalName,
+			&file.StoredName,
+			&file.FilePath,
+			&file.FileSize,
+			&file.ExpiresAt,
+		)
+
+		if err != nil {
+			return nil, err
+		}
+
+		files = append(files, file)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return files, nil
+}
+
+func (r *FileRepository) Delete(
+	ctx context.Context,
+	id string,
+) error {
+
+	query := `
+		DELETE FROM files
+		WHERE id = $1
+	`
+
+	_, err := r.db.Exec(ctx, query, id)
+
+	return err
 }

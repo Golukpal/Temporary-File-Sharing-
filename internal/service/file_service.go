@@ -114,3 +114,48 @@ func (s *FileService) GetFile(
 
 	return file, nil
 }
+
+func (s *FileService) CleanupExpiredFiles(
+	ctx context.Context,
+) error {
+
+	files, err := s.repo.GetExpiredFiles(ctx)
+	if err != nil {
+		return fmt.Errorf(
+			"failed to get expired files: %w",
+			err,
+		)
+	}
+
+	for _, file := range files {
+
+		err := os.Remove(file.FilePath)
+
+		if err != nil && !os.IsNotExist(err) {
+			fmt.Printf(
+				"failed to delete file %s: %v\n",
+				file.ID,
+				err,
+			)
+
+			continue
+		}
+
+		if err := s.repo.Delete(ctx, file.ID); err != nil {
+			fmt.Printf(
+				"failed to delete database record %s: %v\n",
+				file.ID,
+				err,
+			)
+
+			continue
+		}
+
+		fmt.Printf(
+			"deleted expired file: %s\n",
+			file.ID,
+		)
+	}
+
+	return nil
+}
