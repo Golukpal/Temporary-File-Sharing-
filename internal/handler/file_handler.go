@@ -1,7 +1,10 @@
 package handler
 
 import (
+	"errors"
 	"net/http"
+	"os"
+	"path/filepath"
 
 	"github.com/gin-gonic/gin"
 
@@ -34,7 +37,21 @@ func (h *FileHandler) Upload(c *gin.Context) {
 		return
 	}
 
-	tempPath := file.TempFile
+	tempFile, err := os.CreateTemp(
+		"",
+		"upload-*"+filepath.Ext(file.Filename),
+	)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "failed to create temporary file",
+		})
+		return
+	}
+
+	tempPath := tempFile.Name()
+	tempFile.Close()
+
+	defer os.Remove(tempPath)
 
 	if err := c.SaveUploadedFile(file, tempPath); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
@@ -58,4 +75,41 @@ func (h *FileHandler) Upload(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusCreated, result)
+}
+
+func (h *FileHandler) Download(c *gin.Context) {
+	id := c.Param("id")
+
+	file, err := h.service.GetFile(
+		c.Request.Context(),
+		id,
+	)
+
+	if err != nil {
+		if errors.Is(err, service.ErrFileNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{
+				"error": "file not found",
+			})
+			return
+		}
+
+		if errors.Is(err, service.ErrFileExpired) {
+			c.JSON(http.StatusGone, gin.H{
+				"error": "file has expired",
+			})
+			return
+		}
+
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "failed to get file",
+		})
+		return
+	}
+
+	c.Header(
+		"Content-Disposition",
+		`attachment; filename="`+file.OriginalName+`"`,
+	)
+
+	c.File(file.FilePath)
 }

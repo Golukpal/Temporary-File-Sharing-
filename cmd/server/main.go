@@ -42,6 +42,7 @@ func main() {
 	})
 
 	router.POST("/files", fileHandler.Upload)
+	router.GET("/files/:id", fileHandler.Download)
 
 	log.Println("server running on port", cfg.AppPort)
 
