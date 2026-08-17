@@ -2,9 +2,14 @@ package repository
 
 import (
 	"context"
+	"errors"
+	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
+
+var ErrFileNotFound = errors.New("file not found")
 
 type File struct {
 	ID           string
@@ -12,7 +17,7 @@ type File struct {
 	StoredName   string
 	FilePath     string
 	FileSize     int64
-	ExpiresAt    string
+	ExpiresAt    time.Time
 }
 
 type FileRepository struct {
@@ -50,4 +55,47 @@ func (r *FileRepository) Create(ctx context.Context, file File) error {
 	)
 
 	return err
+}
+
+func (r *FileRepository) GetByID(
+	ctx context.Context,
+	id string,
+) (File, error) {
+
+	query := `
+		SELECT
+			id,
+			original_name,
+			stored_name,
+			file_path,
+			file_size,
+			expires_at
+		FROM files
+		WHERE id = $1
+	`
+
+	var file File
+
+	err := r.db.QueryRow(
+		ctx,
+		query,
+		id,
+	).Scan(
+		&file.ID,
+		&file.OriginalName,
+		&file.StoredName,
+		&file.FilePath,
+		&file.FileSize,
+		&file.ExpiresAt,
+	)
+
+	if errors.Is(err, pgx.ErrNoRows) {
+		return File{}, ErrFileNotFound
+	}
+
+	if err != nil {
+		return File{}, err
+	}
+
+	return file, nil
 }

@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -11,6 +12,9 @@ import (
 
 	"github.com/Golukpal/file-sharing/internal/repository"
 )
+
+var ErrFileNotFound = errors.New("file not found")
+var ErrFileExpired = errors.New("file has expired")
 
 type FileService struct {
 	repo *repository.FileRepository
@@ -43,7 +47,10 @@ func (s *FileService) Upload(
 
 	err := os.Rename(filePath, finalPath)
 	if err != nil {
-		return UploadResult{}, fmt.Errorf("failed to store file: %w", err)
+		return UploadResult{}, fmt.Errorf(
+			"failed to store file: %w",
+			err,
+		)
 	}
 
 	expiresAt := time.Now().Add(24 * time.Hour)
@@ -54,13 +61,16 @@ func (s *FileService) Upload(
 		StoredName:   storedName,
 		FilePath:     finalPath,
 		FileSize:     fileSize,
-		ExpiresAt:    expiresAt.Format(time.RFC3339),
+		ExpiresAt:    expiresAt,
 	}
 
 	if err := s.repo.Create(ctx, file); err != nil {
 		_ = os.Remove(finalPath)
 
-		return UploadResult{}, fmt.Errorf("failed to save file metadata: %w", err)
+		return UploadResult{}, fmt.Errorf(
+			"failed to save file metadata: %w",
+			err,
+		)
 	}
 
 	return UploadResult{
@@ -68,4 +78,39 @@ func (s *FileService) Upload(
 		OriginalName: fileName,
 		ExpiresAt:    expiresAt,
 	}, nil
+}
+
+func (s *FileService) GetFile(
+	ctx context.Context,
+	id string,
+) (repository.File, error) {
+
+	file, err := s.repo.GetByID(ctx, id)
+	if err != nil {
+		if errors.Is(err, repository.ErrFileNotFound) {
+			return repository.File{}, ErrFileNotFound
+		}
+
+		return repository.File{}, fmt.Errorf(
+			"failed to get file: %w",
+			err,
+		)
+	}
+
+	if time.Now().After(file.ExpiresAt) {
+		return repository.File{}, ErrFileExpired
+	}
+
+	if _, err := os.Stat(file.FilePath); err != nil {
+		if os.IsNotExist(err) {
+			return repository.File{}, ErrFileNotFound
+		}
+
+		return repository.File{}, fmt.Errorf(
+			"failed to check file: %w",
+			err,
+		)
+	}
+
+	return file, nil
 }
