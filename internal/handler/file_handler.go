@@ -13,11 +13,13 @@ import (
 
 type FileHandler struct {
 	service *service.FileService
+	maxFileSize int64
 }
 
-func NewFileHandler(service *service.FileService) *FileHandler {
+func NewFileHandler(service *service.FileService, maxFileSize int64) *FileHandler {
 	return &FileHandler{
-		service: service,
+		service:     service,
+		maxFileSize: maxFileSize,
 	}
 }
 
@@ -33,6 +35,13 @@ func (h *FileHandler) Upload(c *gin.Context) {
 	if file.Size == 0 {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error": "file cannot be empty",
+		})
+		return
+	}
+
+	if file.Size > h.maxFileSize {
+		c.JSON(http.StatusRequestEntityTooLarge, gin.H{
+			"error": "file size exceeds maximum allowed size",
 		})
 		return
 	}
