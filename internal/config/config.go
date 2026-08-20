@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"strconv"
+	"strings"
 
 	"github.com/joho/godotenv"
 )
@@ -16,7 +17,8 @@ type Config struct {
 	DBPassword string
 	DBName     string
 
-	MaxFileSize int64
+	MaxFileSize       int64
+	AllowedFileTypes []string
 }
 
 func Load() Config {
@@ -30,6 +32,19 @@ func Load() Config {
 		}
 	}
 
+	allowedFileTypes := []string{
+		"pdf",
+		"txt",
+		"png",
+		"jpg",
+		"jpeg",
+		"zip",
+	}
+
+	if value := os.Getenv("ALLOWED_FILE_TYPES"); value != "" {
+		allowedFileTypes = strings.Split(value, ",")
+	}
+
 	return Config{
 		AppPort: os.Getenv("APP_PORT"),
 
@@ -39,6 +54,7 @@ func Load() Config {
 		DBPassword: os.Getenv("DB_PASSWORD"),
 		DBName:     os.Getenv("DB_NAME"),
 
-		MaxFileSize: maxFileSize,
+		MaxFileSize:       maxFileSize,
+		AllowedFileTypes: allowedFileTypes,
 	}
 }

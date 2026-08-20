@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"log"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
@@ -51,6 +52,16 @@ func main() {
 	)
 
 	router := gin.Default()
+
+	router.Use(func(c *gin.Context) {
+	c.Request.Body = http.MaxBytesReader(
+		c.Writer,
+		c.Request.Body,
+		cfg.MaxFileSize+1024*1024,
+	)
+
+	c.Next()
+})
 
 	router.GET("/health", func(c *gin.Context) {
 		c.JSON(200, gin.H{
