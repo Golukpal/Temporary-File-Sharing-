@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 
@@ -30,6 +31,7 @@ func NewFileHandler(
 }
 
 func (h *FileHandler) Upload(c *gin.Context) {
+
 	file, err := c.FormFile("file")
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
@@ -52,6 +54,13 @@ func (h *FileHandler) Upload(c *gin.Context) {
 		return
 	}
 
+	if !h.isAllowedFileType(file.Filename) {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "file type is not allowed",
+		})
+		return
+	}
+
 	tempFile, err := os.CreateTemp(
 		"",
 		"upload-*"+filepath.Ext(file.Filename),
@@ -64,11 +73,22 @@ func (h *FileHandler) Upload(c *gin.Context) {
 	}
 
 	tempPath := tempFile.Name()
-	tempFile.Close()
+
+	if err := tempFile.Close(); err != nil {
+		os.Remove(tempPath)
+
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "failed to prepare temporary file",
+		})
+		return
+	}
 
 	defer os.Remove(tempPath)
 
-	if err := c.SaveUploadedFile(file, tempPath); err != nil {
+	if err := c.SaveUploadedFile(
+		file,
+		tempPath,
+	); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": "failed to save uploaded file",
 		})
@@ -83,9 +103,11 @@ func (h *FileHandler) Upload(c *gin.Context) {
 	)
 
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": err.Error(),
-		})
+		errorResponse(
+			c,
+			http.StatusBadRequest,
+			"file is required",
+		)
 		return
 	}
 
@@ -93,6 +115,7 @@ func (h *FileHandler) Upload(c *gin.Context) {
 }
 
 func (h *FileHandler) Download(c *gin.Context) {
+
 	id := c.Param("id")
 
 	file, err := h.service.GetFile(
@@ -101,23 +124,31 @@ func (h *FileHandler) Download(c *gin.Context) {
 	)
 
 	if err != nil {
+
 		if errors.Is(err, service.ErrFileNotFound) {
-			c.JSON(http.StatusNotFound, gin.H{
-				"error": "file not found",
-			})
+			errorResponse(
+				c,
+				http.StatusBadRequest,
+				"file is required",
+			)
 			return
 		}
 
 		if errors.Is(err, service.ErrFileExpired) {
-			c.JSON(http.StatusGone, gin.H{
-				"error": "file has expired",
-			})
+			errorResponse(
+				c,
+				http.StatusBadRequest,
+				"file is required",
+			)
 			return
 		}
 
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "failed to get file",
-		})
+		errorResponse(
+			c,
+			http.StatusBadRequest,
+			"file is required",
+		)
+
 		return
 	}
 
@@ -127,4 +158,25 @@ func (h *FileHandler) Download(c *gin.Context) {
 	)
 
 	c.File(file.FilePath)
+}
+
+func (h *FileHandler) isAllowedFileType(
+	filename string,
+) bool {
+
+	extension := strings.TrimPrefix(
+		strings.ToLower(filepath.Ext(filename)),
+		".",
+	)
+
+	for _, allowed := range h.allowedFileTypes {
+
+		if extension == strings.ToLower(
+			strings.TrimSpace(allowed),
+		) {
+			return true
+		}
+	}
+
+	return false
 }
