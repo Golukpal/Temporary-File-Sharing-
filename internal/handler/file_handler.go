@@ -12,14 +12,20 @@ import (
 )
 
 type FileHandler struct {
-	service *service.FileService
-	maxFileSize int64
+	service          *service.FileService
+	maxFileSize      int64
+	allowedFileTypes []string
 }
 
-func NewFileHandler(service *service.FileService, maxFileSize int64) *FileHandler {
+func NewFileHandler(
+	service *service.FileService,
+	maxFileSize int64,
+	allowedFileTypes []string,
+) *FileHandler {
 	return &FileHandler{
-		service:     service,
-		maxFileSize: maxFileSize,
+		service:          service,
+		maxFileSize:      maxFileSize,
+		allowedFileTypes: allowedFileTypes,
 	}
 }
 

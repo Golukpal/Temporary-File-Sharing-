@@ -49,6 +49,7 @@ func main() {
 	fileHandler := handler.NewFileHandler(
 		fileService,
 		cfg.MaxFileSize,
+		cfg.AllowedFileTypes,
 	)
 
 	router := gin.Default()
