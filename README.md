@@ -27,7 +27,7 @@ The idea is simple: upload a file, get an ID, share that ID, and the file automa
 
 ## Running the Project
 1. Clone the repository
-` git clone <your-repository-url> `
+` git clone github.com/Golukpal/Temporary-File-Sharing- `
 cd temporary-file-sharing
 2. Start PostgreSQL
 
