@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 
 	"github.com/Golukpal/file-sharing/internal/service"
 )
@@ -115,8 +116,14 @@ func (h *FileHandler) Upload(c *gin.Context) {
 }
 
 func (h *FileHandler) Download(c *gin.Context) {
-
 	id := c.Param("id")
+
+	if _, err := uuid.Parse(id); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "invalid file id",
+		})
+		return
+	}
 
 	file, err := h.service.GetFile(
 		c.Request.Context(),
@@ -124,30 +131,23 @@ func (h *FileHandler) Download(c *gin.Context) {
 	)
 
 	if err != nil {
-
 		if errors.Is(err, service.ErrFileNotFound) {
-			errorResponse(
-				c,
-				http.StatusBadRequest,
-				"file is required",
-			)
+			c.JSON(http.StatusNotFound, gin.H{
+				"error": "file not found",
+			})
 			return
 		}
 
 		if errors.Is(err, service.ErrFileExpired) {
-			errorResponse(
-				c,
-				http.StatusBadRequest,
-				"file is required",
-			)
+			c.JSON(http.StatusGone, gin.H{
+				"error": "file has expired",
+			})
 			return
 		}
 
-		errorResponse(
-			c,
-			http.StatusBadRequest,
-			"file is required",
-		)
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "failed to get file",
+		})
 
 		return
 	}
