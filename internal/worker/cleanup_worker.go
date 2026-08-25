@@ -17,7 +17,6 @@ func NewCleanupWorker(
 	service *service.FileService,
 	interval time.Duration,
 ) *CleanupWorker {
-
 	return &CleanupWorker{
 		service:  service,
 		interval: interval,
@@ -25,25 +24,29 @@ func NewCleanupWorker(
 }
 
 func (w *CleanupWorker) Start(ctx context.Context) {
-
 	ticker := time.NewTicker(w.interval)
 	defer ticker.Stop()
 
-	log.Println("cleanup worker started")
+	log.Printf(
+		"cleanup worker started, interval=%s",
+		w.interval,
+	)
 
 	for {
 		select {
-
 		case <-ticker.C:
 
-			log.Println("running cleanup...")
+			log.Println("cleanup started")
 
 			if err := w.service.CleanupExpiredFiles(ctx); err != nil {
-				log.Println(
-					"cleanup failed:",
+				log.Printf(
+					"cleanup failed: %v",
 					err,
 				)
+				continue
 			}
+
+			log.Println("cleanup completed")
 
 		case <-ctx.Done():
 
