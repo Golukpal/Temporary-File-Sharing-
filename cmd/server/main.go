@@ -20,7 +20,6 @@ import (
 )
 
 func main() {
-
 	cfg := config.Load()
 
 	if err := os.MkdirAll("storage", 0755); err != nil {
@@ -40,6 +39,7 @@ func main() {
 
 	defer db.Close()
 
+	// Dependencies
 	fileRepository := repository.NewFileRepository(db)
 
 	fileService := service.NewFileService(
@@ -52,10 +52,10 @@ func main() {
 		cfg.AllowedFileTypes,
 	)
 
+	// Router
 	router := gin.Default()
 
 	router.Use(func(c *gin.Context) {
-
 		c.Request.Body = http.MaxBytesReader(
 			c.Writer,
 			c.Request.Body,
@@ -66,7 +66,7 @@ func main() {
 	})
 
 	router.GET("/health", func(c *gin.Context) {
-		c.JSON(200, gin.H{
+		c.JSON(http.StatusOK, gin.H{
 			"status": "ok",
 		})
 	})
@@ -81,22 +81,44 @@ func main() {
 		fileHandler.Download,
 	)
 
-	// Context for background workers
-	ctx, cancel := context.WithCancel(
+	// Worker context
+	workerCtx, workerCancel := context.WithCancel(
 		context.Background(),
 	)
 
-	defer cancel()
+	defer workerCancel()
 
-	// Start cleanup worker
+	// Cleanup worker
 	cleanupWorker := worker.NewCleanupWorker(
 		fileService,
 		1*time.Minute,
 	)
 
-	go cleanupWorker.Start(ctx)
+	go cleanupWorker.Start(workerCtx)
 
-	// Graceful shutdown signal
+	// HTTP server
+	server := &http.Server{
+		Addr:    ":" + cfg.AppPort,
+		Handler: router,
+	}
+
+	go func() {
+		log.Printf(
+			"server running on port %s",
+			cfg.AppPort,
+		)
+
+		if err := server.ListenAndServe(); err != nil &&
+			err != http.ErrServerClosed {
+
+			log.Fatalf(
+				"server failed: %v",
+				err,
+			)
+		}
+	}()
+
+	// Wait for shutdown signal
 	signalChan := make(chan os.Signal, 1)
 
 	signal.Notify(
@@ -105,25 +127,27 @@ func main() {
 		syscall.SIGTERM,
 	)
 
-	go func() {
+	<-signalChan
 
-		<-signalChan
+	log.Println("shutdown signal received")
 
-		log.Println("shutdown signal received")
-
-		cancel()
-
-	}()
-
-	log.Println(
-		"server running on port",
-		cfg.AppPort,
+	// Stop accepting new requests
+	shutdownCtx, shutdownCancel := context.WithTimeout(
+		context.Background(),
+		5*time.Second,
 	)
 
-	if err := router.Run(
-		":" + cfg.AppPort,
-	); err != nil {
+	defer shutdownCancel()
 
-		log.Fatal(err)
+	if err := server.Shutdown(shutdownCtx); err != nil {
+		log.Printf(
+			"server shutdown failed: %v",
+			err,
+		)
 	}
+
+	// Stop background worker
+	workerCancel()
+
+	log.Println("server stopped")
 }
